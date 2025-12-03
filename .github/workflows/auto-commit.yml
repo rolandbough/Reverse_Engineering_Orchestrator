@@ -1,0 +1,73 @@
+name: Automated Versioning and Commits
+
+# ADR Note: This workflow provides cloud-based automation that runs independently
+# of local machine availability. The hourly schedule ensures regular commits
+# without being too frequent. workflow_dispatch allows manual triggering for
+# testing. Push trigger ensures automation runs when code is pushed.
+
+on:
+  schedule:
+    # ADR Note: Hourly schedule balances automation frequency with GitHub Actions
+    # rate limits and repository activity. Can be adjusted based on project needs.
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    # Allow manual triggering for testing and on-demand automation
+  push:
+    branches:
+      - master
+
+jobs:
+  auto-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # ADR Note: GITHUB_TOKEN is automatically provided and has write access
+          # when contents: write permission is set. fetch-depth: 0 ensures full
+          # history is available for version tag creation.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          # ADR Note: Python 3.11 chosen as a stable, modern version. The script
+          # should work with 3.7+ but 3.11 provides better performance.
+          python-version: '3.11'
+      
+      - name: Check for changes
+        id: check-changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          
+          # Check if there are any changes
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Run automation script
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          python version_manager.py --auto
+      
+      - name: Create version tag if needed
+        if: steps.check-changes.outputs.has_changes == 'true'
+        run: |
+          # ADR Note: Version tags are only created when VERSION file changes,
+          # not on every commit. This prevents tag spam while ensuring versions
+          # are properly tagged when bumped. The "v" prefix follows semantic
+          # versioning conventions (e.g., v1.2.3).
+          # Check if version file changed
+          if git diff --name-only HEAD~1 | grep -q "VERSION"; then
+            VERSION=$(cat VERSION)
+            git tag -a "v${VERSION}" -m "Version ${VERSION}"
+            git push origin --tags
+          fi
+

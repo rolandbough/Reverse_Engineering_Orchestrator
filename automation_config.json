@@ -1,0 +1,23 @@
+{
+  "auto_commit": true,
+  "auto_push": true,
+  "commit_message_template": "Auto-commit: {timestamp}",
+  "min_changes_for_commit": 1,
+  "excluded_paths": [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "node_modules",
+    ".vscode",
+    ".idea",
+    "*.pyc",
+    "*.log"
+  ],
+  "schedule": {
+    "enabled": false,
+    "interval_minutes": 60,
+    "run_on_startup": false
+  }
+}
+
