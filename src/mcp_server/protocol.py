@@ -801,6 +801,44 @@ class MCPProtocolHandler:
                  f"You can now use this region with start_visual_monitoring or start_workflow tools."
         )]
     
+    async def _handle_select_region_interactive(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle select_region_interactive tool call"""
+        if not VISUAL_ANALYZER_AVAILABLE or not self.visual_analyzer:
+            return [TextContent(
+                type="text",
+                text="Visual analyzer not available. Install dependencies: pip install opencv-python"
+            )]
+        
+        screenshot_base64 = arguments.get("screenshot_base64")
+        
+        if not screenshot_base64:
+            return [TextContent(
+                type="text",
+                text="Error: screenshot_base64 is required"
+            )]
+        
+        # Use interactive selection
+        result = self.visual_analyzer.select_region_interactive(
+            screenshot_base64=screenshot_base64
+        )
+        
+        if result is None:
+            return [TextContent(
+                type="text",
+                text="Region selection was cancelled. Press ESC or close the window to cancel."
+            )]
+        
+        return [TextContent(
+            type="text",
+            text=f"Region selected interactively:\n{json.dumps(result, indent=2)}\n\n"
+                 f"Instructions:\n"
+                 f"1. A window will open showing the screenshot\n"
+                 f"2. Click and drag to select a rectangle\n"
+                 f"3. Press SPACE or ENTER to confirm\n"
+                 f"4. Press ESC to cancel\n\n"
+                 f"You can now use this region with start_visual_monitoring or start_workflow tools."
+        )]
+    
     async def _handle_start_workflow(self, arguments: Dict[str, Any]) -> List[TextContent]:
         """Handle start_workflow tool call"""
         if not ORCHESTRATOR_AVAILABLE or not self.orchestrator:
