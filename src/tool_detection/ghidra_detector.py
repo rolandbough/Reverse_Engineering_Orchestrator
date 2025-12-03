@@ -85,7 +85,9 @@ class GhidraDetector:
         paths = []
         
         # Project-local tools directory (for development)
-        project_root = Path(__file__).parent.parent.parent.parent
+        # ADR Note: __file__ is src/tool_detection/ghidra_detector.py
+        # So parent.parent.parent = project root (src -> project root)
+        project_root = Path(__file__).parent.parent.parent
         project_ghidra = project_root / "tools" / "ghidra"
         if project_ghidra.exists():
             paths.append(project_ghidra)
