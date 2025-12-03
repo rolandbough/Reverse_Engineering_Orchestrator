@@ -31,3 +31,6 @@ numpy>=1.24.0  # Array operations
 # Optional: OCR support
 # pytesseract>=0.3.10  # Text extraction (requires Tesseract OCR installed)
 
+# Phase 3: Memory Scanner
+pymem>=1.13.0  # Windows memory access for custom scanner
+
