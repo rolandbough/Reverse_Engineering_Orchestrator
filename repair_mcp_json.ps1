@@ -111,6 +111,12 @@ $reoConfig = New-Object PSObject
 $reoConfig | Add-Member -MemberType NoteProperty -Name "command" -Value $venvPython
 $reoConfig | Add-Member -MemberType NoteProperty -Name "args" -Value @("-m", "src.mcp_server")
 $reoConfig | Add-Member -MemberType NoteProperty -Name "cwd" -Value $projectPath
+
+# Set PYTHONPATH to ensure src module can be found
+$envDict = New-Object PSObject
+$envDict | Add-Member -MemberType NoteProperty -Name "PYTHONPATH" -Value $projectPath
+$reoConfig | Add-Member -MemberType NoteProperty -Name "env" -Value $envDict
+
 $reoConfig | Add-Member -MemberType NoteProperty -Name "timeout" -Value 1800
 $reoConfig | Add-Member -MemberType NoteProperty -Name "disabled" -Value $false
 $reoConfig | Add-Member -MemberType NoteProperty -Name "autoApprove" -Value @(

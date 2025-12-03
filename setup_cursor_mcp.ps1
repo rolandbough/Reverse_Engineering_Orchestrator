@@ -76,6 +76,12 @@ $serverConfig = New-Object PSObject
 $serverConfig | Add-Member -MemberType NoteProperty -Name "command" -Value $PythonPath
 $serverConfig | Add-Member -MemberType NoteProperty -Name "args" -Value @("-m", "src.mcp_server")
 $serverConfig | Add-Member -MemberType NoteProperty -Name "cwd" -Value $ProjectPath
+
+# Set PYTHONPATH to ensure src module can be found
+$envDict = New-Object PSObject
+$envDict | Add-Member -MemberType NoteProperty -Name "PYTHONPATH" -Value $ProjectPath
+$serverConfig | Add-Member -MemberType NoteProperty -Name "env" -Value $envDict
+
 $serverConfig | Add-Member -MemberType NoteProperty -Name "timeout" -Value 1800
 $serverConfig | Add-Member -MemberType NoteProperty -Name "disabled" -Value $false
 $serverConfig | Add-Member -MemberType NoteProperty -Name "autoApprove" -Value @(
