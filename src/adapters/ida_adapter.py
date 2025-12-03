@@ -1,20 +1,17 @@
 """
 IDA Pro Adapter Implementation
 
-ADR Note: IDA Pro integration is more complex. This is a placeholder
-implementation. Full implementation requires:
-1. IDA Pro to be running, OR
-2. IDA Pro command-line mode, OR
-3. IDA Pro remote debugging interface
-
-Current implementation provides structure for future development.
+ADR Note: Uses direct RPC client to communicate with IDA Pro's RPC server.
+This provides full control and avoids dependency on external MCP servers.
+Based on query_ida_functions.py RPC client implementation.
 """
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from .base_adapter import BaseAdapter, AdapterResult, BreakpointType
+from ..utils.ida_rpc_client import IDAProRPCClient
 
 logger = logging.getLogger(__name__)
 
@@ -23,56 +20,55 @@ class IDAAdapter(BaseAdapter):
     """
     Adapter for IDA Pro reverse engineering tool
     
-    ADR Note: IDA Pro integration requires IDA Pro to be running or
-    accessible via command-line. This is a placeholder implementation
-    that will be completed based on available IDA Pro access methods.
+    ADR Note: Uses direct RPC client to communicate with IDA Pro's RPC server.
+    Requires IDA Pro to be running with MCP plugin loaded. Works with
+    already-loaded databases (binary loading happens via GUI).
     """
     
-    def __init__(self, install_path: Path):
+    def __init__(self, install_path: Path, rpc_url: str = "http://127.0.0.1:13337"):
+        """
+        Initialize IDA adapter
+        
+        Args:
+            install_path: IDA Pro installation path (for reference)
+            rpc_url: IDA Pro RPC server URL
+        """
         super().__init__(install_path)
-        self.ida_exe = self._find_ida_executable()
+        self.rpc_client = IDAProRPCClient(rpc_url)
         self.current_database: Optional[str] = None
-    
-    def _find_ida_executable(self) -> Optional[Path]:
-        """Find IDA Pro executable"""
-        # Check for ida64.exe (64-bit) or ida.exe (32-bit)
-        ida64 = self.install_path / "ida64.exe"
-        ida = self.install_path / "ida.exe"
-        
-        if ida64.exists():
-            return ida64
-        if ida.exists():
-            return ida
-        
-        logger.warning(f"IDA Pro executable not found in {self.install_path}")
-        return None
     
     def connect(self) -> AdapterResult:
         """
-        Connect to IDA Pro
+        Connect to IDA Pro via RPC
         
-        ADR Note: Connection method depends on how IDA Pro is being used:
-        - If IDA Pro is running: Check for running process
-        - If using command-line: Verify executable exists
-        - If using remote: Establish connection
+        ADR Note: Tests RPC connection. IDA Pro must be running with
+        MCP plugin loaded for this to work.
         """
-        if not self.ida_exe:
+        try:
+            if not self.rpc_client.check_connection():
+                return AdapterResult(
+                    success=False,
+                    error="Cannot connect to IDA Pro RPC server. Make sure IDA Pro is running with MCP plugin loaded."
+                )
+            
+            # Get metadata to verify connection
+            metadata = self.rpc_client.get_metadata()
+            self.current_database = metadata.get("module", "unknown")
+            
+            self.is_connected = True
+            return AdapterResult(
+                success=True,
+                data={
+                    "message": "Connected to IDA Pro",
+                    "database": self.current_database,
+                    "metadata": metadata
+                }
+            )
+        except Exception as e:
             return AdapterResult(
                 success=False,
-                error="IDA Pro executable not found"
+                error=f"Failed to connect to IDA Pro: {e}"
             )
-        
-        # TODO: Implement actual connection logic
-        # This may involve:
-        # - Checking for running IDA Pro process
-        # - Testing command-line execution
-        # - Establishing remote debugging connection
-        
-        self.is_connected = True
-        return AdapterResult(
-            success=True,
-            data={"message": "IDA Pro adapter initialized (placeholder)"}
-        )
     
     def disconnect(self) -> AdapterResult:
         """Disconnect from IDA Pro"""
@@ -84,71 +80,137 @@ class IDAAdapter(BaseAdapter):
         """
         Load binary in IDA Pro
         
-        ADR Note: Implementation depends on execution mode:
-        - Command-line: Use ida64.exe -A -c binary.exe
-        - Running instance: Use IDAPython API
+        ADR Note: IDA Pro binary loading typically happens through GUI.
+        This method checks if the binary is already loaded. For programmatic
+        loading, would need IDA Pro command-line mode or scripting.
         """
-        # TODO: Implement binary loading
-        return AdapterResult(
-            success=False,
-            error="IDA Pro binary loading not yet implemented"
-        )
+        # Check if binary is already loaded by comparing paths
+        try:
+            metadata = self.rpc_client.get_metadata()
+            current_path = metadata.get("path", "")
+            
+            if str(binary_path) in current_path or current_path in str(binary_path):
+                self.current_database = metadata.get("module", "unknown")
+                return AdapterResult(
+                    success=True,
+                    data={
+                        "message": "Binary already loaded",
+                        "database": self.current_database,
+                        "path": current_path
+                    }
+                )
+            else:
+                return AdapterResult(
+                    success=False,
+                    error=f"Binary not loaded. Current database: {metadata.get('module', 'unknown')}. "
+                          "Please load the binary in IDA Pro GUI first."
+                )
+        except Exception as e:
+            return AdapterResult(
+                success=False,
+                error=f"Failed to check binary status: {e}"
+            )
     
     def decompile_function(self, address: int) -> AdapterResult:
         """
         Decompile function using Hex-Rays decompiler
         
-        ADR Note: Requires Hex-Rays decompiler license.
-        Falls back to disassembly if Hex-Rays not available.
+        ADR Note: Uses IDA Pro RPC decompile_function method.
+        Requires Hex-Rays decompiler license.
+        IDA Pro RPC expects address as hex string.
         """
-        # TODO: Implement decompilation
-        # This would use IDAPython API:
-        # - idc.get_func_name(address)
-        # - idaapi.decompile(address)
-        return AdapterResult(
-            success=False,
-            error="IDA Pro decompilation not yet implemented"
-        )
+        try:
+            # IDA Pro RPC expects address as hex string
+            addr_str = f"0x{address:X}"
+            code = self.rpc_client._call_rpc("decompile_function", [addr_str])
+            if isinstance(code, str):
+                return AdapterResult(
+                    success=True,
+                    data={
+                        "address": addr_str,
+                        "code": code
+                    }
+                )
+            return AdapterResult(
+                success=False,
+                error="Unexpected response format from decompile_function"
+            )
+        except Exception as e:
+            return AdapterResult(
+                success=False,
+                error=f"Decompilation failed: {e}"
+            )
     
     def set_breakpoint(self, address: int, bp_type: BreakpointType) -> AdapterResult:
         """
         Set breakpoint in IDA Pro debugger
         
-        ADR Note: Requires IDA Pro debugger (not just disassembler).
-        Uses IDAPython API: idc.AddBptEx()
+        ADR Note: IDA Pro RPC may not support breakpoint setting directly.
+        This would require unsafe RPC methods or IDAPython scripting.
+        For now, returns not implemented.
         """
-        # TODO: Implement breakpoint setting
+        # Check if unsafe methods are available
+        # Most breakpoint operations require unsafe RPC access
         return AdapterResult(
             success=False,
-            error="IDA Pro breakpoint setting not yet implemented"
+            error="Breakpoint setting requires unsafe RPC methods. "
+                  "Use IDA Pro GUI or enable unsafe mode in ida-pro-mcp."
         )
     
     def read_memory(self, address: int, size: int) -> AdapterResult:
         """
-        Read memory from debugged process
+        Read memory from binary (static analysis)
         
-        ADR Note: Only works when debugging a process.
-        Uses IDAPython API: idc.get_bytes()
+        ADR Note: Uses read_memory_bytes RPC method. This reads from
+        the loaded binary file, not runtime memory. For runtime memory,
+        need to be debugging a process.
         """
-        # TODO: Implement memory reading
-        return AdapterResult(
-            success=False,
-            error="IDA Pro memory reading not yet implemented"
-        )
+        try:
+            data = self.rpc_client.read_memory_bytes(address, size)
+            return AdapterResult(
+                success=True,
+                data={
+                    "address": f"0x{address:X}",
+                    "size": size,
+                    "data": data.hex(),
+                    "note": "Reading from binary file, not runtime memory"
+                }
+            )
+        except Exception as e:
+            return AdapterResult(
+                success=False,
+                error=f"Memory read failed: {e}"
+            )
     
     def get_function_at(self, address: int) -> AdapterResult:
-        """Get function information"""
-        # TODO: Implement using IDAPython API
-        return AdapterResult(
-            success=False,
-            error="IDA Pro function info not yet implemented"
-        )
+        """Get function information at address"""
+        try:
+            func = self.rpc_client.get_function_by_address(address)
+            return AdapterResult(
+                success=True,
+                data=func
+            )
+        except Exception as e:
+            return AdapterResult(
+                success=False,
+                error=f"Failed to get function info: {e}"
+            )
     
     def find_references(self, address: int) -> AdapterResult:
         """Find references to address"""
-        # TODO: Implement using IDAPython API
-        return AdapterResult(
-            success=False,
-            error="IDA Pro reference finding not yet implemented"
-        )
+        try:
+            refs = self.rpc_client.get_xrefs_to(address)
+            return AdapterResult(
+                success=True,
+                data={
+                    "address": f"0x{address:X}",
+                    "references": refs,
+                    "count": len(refs)
+                }
+            )
+        except Exception as e:
+            return AdapterResult(
+                success=False,
+                error=f"Failed to find references: {e}"
+            )
 

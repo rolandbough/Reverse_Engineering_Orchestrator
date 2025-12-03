@@ -8,6 +8,7 @@ communication over stdio for Cursor integration.
 import json
 import sys
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from mcp.server import Server
@@ -15,8 +16,8 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent, ImageContent, EmbeddedResource
 
 from .config import ServerConfig
-from ..tool_detection import ToolDetector, ToolType
-from ..adapters import BaseAdapter, GhidraAdapter, IDAAdapter
+from ..tool_detection import ToolDetector, ToolType, DetectionResult
+from ..adapters import BaseAdapter, AdapterFactory
 
 logger = logging.getLogger(__name__)
 
@@ -240,7 +241,12 @@ class MCPProtocolHandler:
                 raise ValueError(f"Unknown resource: {uri}")
     
     async def _initialize_adapter(self) -> Dict[str, Any]:
-        """Initialize adapter based on detected tool"""
+        """
+        Initialize adapter based on detected tool
+        
+        ADR Note: Creates appropriate adapter (IDA or Ghidra) based on
+        detection results. IDA adapter uses RPC URL, Ghidra uses install path.
+        """
         detected = self.tool_detector.detect_available()
         
         if not detected or not detected.is_available:
@@ -249,21 +255,14 @@ class MCPProtocolHandler:
                 "error": "No reverse engineering tools detected. Please install IDA Pro or Ghidra."
             }
         
-        if not detected.install_path:
-            return {
-                "success": False,
-                "error": "Tool detected but installation path not found"
-            }
+        # Use factory to create adapter
+        rpc_url = getattr(self.config, 'ida_rpc_url', 'http://127.0.0.1:13337')
+        self.current_adapter = AdapterFactory.create_adapter(detected, rpc_url=rpc_url)
         
-        # Create appropriate adapter
-        if detected.tool_type == ToolType.GHIDRA:
-            self.current_adapter = GhidraAdapter(detected.install_path)
-        elif detected.tool_type == ToolType.IDA_PRO:
-            self.current_adapter = IDAAdapter(detected.install_path)
-        else:
+        if not self.current_adapter:
             return {
                 "success": False,
-                "error": f"Unsupported tool type: {detected.tool_type}"
+                "error": f"Failed to create adapter for {detected.tool_type.value}"
             }
         
         # Connect adapter

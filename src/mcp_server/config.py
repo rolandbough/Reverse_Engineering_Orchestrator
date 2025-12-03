@@ -33,6 +33,7 @@ class ServerConfig(BaseModel):
     # IDA Pro settings
     ida_path: Optional[Path] = Field(default=None)
     ida_python_path: Optional[Path] = Field(default=None)
+    ida_rpc_url: str = Field(default="http://127.0.0.1:13337")
     
     # Ghidra settings
     ghidra_install_dir: Optional[Path] = Field(default=None)
@@ -58,6 +59,7 @@ class ServerConfig(BaseModel):
             preferred_tool=os.getenv("REO_PREFERRED_TOOL"),  # "ida" or "ghidra"
             ida_path=Path(os.getenv("IDA_PATH")) if os.getenv("IDA_PATH") else None,
             ida_python_path=Path(os.getenv("IDA_PYTHON_PATH")) if os.getenv("IDA_PYTHON_PATH") else None,
+            ida_rpc_url=os.getenv("IDA_RPC_URL", "http://127.0.0.1:13337"),
             ghidra_install_dir=Path(os.getenv("GHIDRA_INSTALL_DIR")) if os.getenv("GHIDRA_INSTALL_DIR") else None,
             ghidra_bridge_port=int(os.getenv("GHIDRA_BRIDGE_PORT", "1337")),
             mcp_transport=os.getenv("REO_MCP_TRANSPORT", "stdio"),
