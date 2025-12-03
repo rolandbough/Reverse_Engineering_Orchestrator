@@ -1,83 +1,171 @@
 # Reverse Engineering Orchestrator
 
-Automated versioning and commit system for managing project changes and GitHub synchronization.
+An MCP (Model Context Protocol) server that provides AI-powered reverse engineering capabilities to Cursor IDE, supporting both IDA Pro and Ghidra.
 
 ## Features
 
+- **MCP Server Integration**: Works seamlessly with Cursor IDE via Model Context Protocol
+- **Automatic Tool Detection**: Automatically detects and selects IDA Pro or Ghidra
+- **Unified Interface**: Single API works with both reverse engineering tools
+- **AI-Powered Analysis**: Leverage AI to analyze decompiled code and find patterns
 - **Semantic Versioning**: Automatic version management (MAJOR.MINOR.PATCH)
 - **Automated Commits**: Periodically commit and push changes to GitHub
-- **GitHub Actions**: CI/CD workflow for automated versioning
-- **Windows Task Scheduler**: Local automation support for Windows
+
+## Architecture
+
+The Reverse Engineering Orchestrator consists of:
+
+1. **MCP Server**: Main server that communicates with Cursor via MCP protocol
+2. **Tool Detection**: Automatic detection of IDA Pro or Ghidra
+3. **Tool Adapters**: Unified interface for different RE tools
+4. **MCP Tools**: Reverse engineering operations exposed as MCP tools
+5. **MCP Resources**: System state exposed as MCP resources
+
+See [documentation/ADR-001-reverse-engineering-orchestrator.md](documentation/ADR-001-reverse-engineering-orchestrator.md) for detailed architecture.
 
 ## Quick Start
 
-### Manual Operations
+### Prerequisites
+
+- Python 3.8+
+- Either IDA Pro (with IDAPython) or Ghidra installed
+- Cursor IDE
+
+### Installation
 
 ```bash
-# Run automated commit and push
-python version_manager.py --auto
+# Clone the repository
+git clone https://github.com/rolandbough/Reverse_Engineering_Orchestrator.git
+cd Reverse_Engineering_Orchestrator
 
-# Bump version (patch, minor, or major)
-python version_manager.py --bump patch
+# Install dependencies
+pip install -r requirements.txt
 
-# Commit changes manually
-python version_manager.py --commit --message "Your commit message"
-
-# Push changes
-python version_manager.py --push
-
-# Create and push version tag
-python version_manager.py --tag
+# Install the package
+pip install -e .
 ```
 
-### Automated Scheduling
+### Configuration
 
-#### Windows Task Scheduler
+Set environment variables (optional):
 
-1. Run the setup script (as Administrator for best results):
-   ```powershell
-   .\setup_scheduler.ps1
-   ```
+```bash
+# For IDA Pro
+export IDA_PATH="/path/to/ida"
 
-2. Or manually run the automation script:
-   ```powershell
-   .\automate.ps1
-   ```
+# For Ghidra
+export GHIDRA_INSTALL_DIR="/path/to/ghidra"
 
-#### GitHub Actions
+# Server configuration
+export REO_LOG_LEVEL="INFO"
+export REO_PREFERRED_TOOL="ida"  # or "ghidra"
+```
 
-The repository includes a GitHub Actions workflow (`.github/workflows/auto-commit.yml`) that:
-- Runs every hour automatically
-- Commits and pushes changes
-- Creates version tags when the version file changes
+### Running the MCP Server
 
-## Configuration
+```bash
+# Run the server (will be configured in Cursor)
+python -m src.mcp_server.server
+```
 
-Edit `automation_config.json` to customize:
-- Auto-commit and auto-push settings
-- Commit message templates
-- Minimum changes required for commit
-- Excluded file paths
+### Cursor Configuration
 
-## Version Management
+Add to your Cursor MCP configuration:
 
-The current version is stored in `VERSION` file. Use the version manager to bump versions:
+```json
+{
+  "mcpServers": {
+    "reverse-engineering-orchestrator": {
+      "command": "python",
+      "args": ["-m", "src.mcp_server.server"],
+      "env": {
+        "REO_LOG_LEVEL": "INFO"
+      }
+    }
+  }
+}
+```
 
-- **Patch** (0.1.0 → 0.1.1): Bug fixes
-- **Minor** (0.1.0 → 0.2.0): New features, backward compatible
-- **Major** (0.1.0 → 1.0.0): Breaking changes
+## Tool Detection
 
-## Files
+The server automatically detects available tools using multiple methods:
 
-- `version_manager.py` - Main automation script
-- `VERSION` - Current version number
-- `automation_config.json` - Configuration settings
-- `automate.ps1` / `automate.bat` - Windows automation scripts
-- `setup_scheduler.ps1` - Task Scheduler setup script
-- `.github/workflows/auto-commit.yml` - GitHub Actions workflow
+### IDA Pro Detection
+- Environment variable: `IDA_PATH`
+- Windows Registry
+- Common installation paths
+- Python module: `idapython`
+- Running processes
 
-## Requirements
+### Ghidra Detection
+- Environment variable: `GHIDRA_INSTALL_DIR`
+- Common installation paths
+- Python module: `ghidra_bridge`
+- Running Java processes
 
-- Python 3.7+
-- Git
-- GitHub CLI (optional, for manual operations)
+## Development
+
+### Project Structure
+
+```
+src/
+├── mcp_server/          # MCP server implementation
+├── tool_detection/      # Tool detection system
+├── adapters/            # Tool adapters (IDA, Ghidra)
+├── tools/               # MCP tools implementation
+└── utils/               # Utilities
+
+documentation/
+├── ADR-*.md            # Architecture Decision Records
+├── IMPLEMENTATION_PLAN.md  # Detailed implementation plan
+└── agent.md            # Agent directives
+```
+
+### Running Tests
+
+```bash
+pytest tests/
+```
+
+### Development Setup
+
+```bash
+# Install development dependencies
+pip install -r requirements.txt
+
+# Run tests
+pytest
+
+# Type checking
+mypy src/
+
+# Code formatting
+black src/
+```
+
+## Documentation
+
+- [Implementation Plan](documentation/IMPLEMENTATION_PLAN.md) - Detailed step-by-step plan
+- [ADR-001: System Architecture](documentation/ADR-001-reverse-engineering-orchestrator.md)
+- [ADR-002: Versioning and Automation](documentation/ADR-002-versioning-and-automation.md)
+- [ADR-003: MCP Server Architecture](documentation/ADR-003-mcp-server-architecture.md)
+
+## Status
+
+🚧 **In Development** - Currently implementing Phase 1 (Foundation)
+
+- [x] Project structure
+- [x] Tool detection system
+- [x] MCP server foundation
+- [ ] MCP protocol implementation
+- [ ] Tool adapters
+- [ ] MCP tools
+- [ ] Integration testing
+
+## Contributing
+
+See [documentation/agent.md](documentation/agent.md) for development guidelines and agent directives.
+
+## License
+
+[To be determined]
