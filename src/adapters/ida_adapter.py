@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any
 
 from .base_adapter import BaseAdapter, AdapterResult, BreakpointType
 from ..utils.ida_rpc_client import IDAProRPCClient
+from ..tool_detection import ToolType
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class IDAAdapter(BaseAdapter):
         super().__init__(install_path)
         self.rpc_client = IDAProRPCClient(rpc_url)
         self.current_database: Optional[str] = None
+        self.tool_type = ToolType.IDA_PRO
     
     def connect(self) -> AdapterResult:
         """
@@ -69,6 +71,20 @@ class IDAAdapter(BaseAdapter):
                 success=False,
                 error=f"Failed to connect to IDA Pro: {e}"
             )
+    
+    def get_tool_info(self) -> Dict[str, Any]:
+        """Get IDA Pro tool information"""
+        info = super().get_tool_info()
+        try:
+            metadata = self.rpc_client.get_metadata()
+            info.update({
+                "tool_name": "IDA Pro",
+                "database": metadata.get("module", "unknown"),
+                "rpc_url": self.rpc_client.rpc_url
+            })
+        except:
+            pass
+        return info
     
     def disconnect(self) -> AdapterResult:
         """Disconnect from IDA Pro"""
