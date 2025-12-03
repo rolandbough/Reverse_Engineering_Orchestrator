@@ -20,8 +20,13 @@ def check_cursor_config():
         return False
     
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            config = json.load(f)
+        # Handle UTF-8 BOM if present
+        with open(config_path, 'rb') as f:
+            content = f.read()
+            # Remove BOM if present
+            if content.startswith(b'\xef\xbb\xbf'):
+                content = content[3:]
+            config = json.loads(content.decode('utf-8'))
         
         servers = config.get("mcpServers", {})
         
