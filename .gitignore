@@ -30,3 +30,8 @@ automation.log
 tools/ghidra/
 tools/ida/
 
+# Virtual environment
+venv/
+env/
+ENV/
+
