@@ -10,6 +10,13 @@ import threading
 import time
 from typing import Optional, Dict, List, Any
 from pathlib import Path
+import numpy as np
+
+try:
+    import cv2
+    CV2_AVAILABLE = True
+except ImportError:
+    CV2_AVAILABLE = False
 
 from .screen_capture import ScreenCapture
 from .change_detector import ChangeDetector
