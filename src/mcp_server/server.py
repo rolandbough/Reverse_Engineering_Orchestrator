@@ -1,20 +1,17 @@
 """
 MCP Server Implementation
 
-ADR Note: This is a placeholder for the main MCP server implementation.
-The actual MCP protocol implementation will depend on the MCP SDK availability
-or require implementing the stdio-based JSON-RPC 2.0 protocol directly.
-
-For now, this provides the structure and integration points.
+ADR Note: Main entry point for MCP server. Uses protocol handler for
+actual MCP communication. Provides high-level server management.
 """
 
-import sys
-import json
+import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from .config import ServerConfig
-from ..tool_detection import ToolDetector, DetectionResult
+from .protocol import MCPProtocolHandler
+from ..tool_detection import ToolDetector
 
 logger = logging.getLogger(__name__)
 
@@ -33,16 +30,18 @@ class MCPServer:
         self.tool_detector = ToolDetector(
             preferred_tool=self.config.preferred_tool
         )
-        self.detected_tool: Optional[DetectionResult] = None
         
         # Initialize logging
         self._setup_logging()
         
+        # Create protocol handler
+        self.protocol_handler = MCPProtocolHandler(self.config, self.tool_detector)
+        
         # Auto-detect tools on startup if configured
         if self.config.auto_detect_tools:
-            self.detected_tool = self.tool_detector.detect_available()
-            if self.detected_tool:
-                logger.info(f"Detected tool: {self.detected_tool.tool_type.value}")
+            detected = self.tool_detector.detect_available()
+            if detected:
+                logger.info(f"Detected tool: {detected.tool_type.value}")
             else:
                 logger.warning("No reverse engineering tools detected")
     
@@ -58,37 +57,12 @@ class MCPServer:
         """
         Run the MCP server
         
-        ADR Note: This is a placeholder. Actual implementation will:
-        1. Set up stdio communication
-        2. Handle JSON-RPC 2.0 protocol
-        3. Register tools and resources
-        4. Process requests from Cursor
+        ADR Note: Runs async MCP server using stdio transport.
+        This is the main entry point for the server.
         """
         logger.info("Starting MCP Server...")
         logger.info(f"Server: {self.config.server_name} v{self.config.server_version}")
         
-        # TODO: Implement actual MCP protocol handling
-        # For now, this is a placeholder structure
-        
-        logger.info("MCP Server ready (placeholder implementation)")
-        logger.warning("Full MCP protocol implementation pending")
-        
-        # In actual implementation, this would loop reading from stdin
-        # and writing responses to stdout
-        
-    def get_tool_status(self) -> Dict[str, Any]:
-        """Get current tool status as resource"""
-        if self.detected_tool:
-            return {
-                "tool_type": self.detected_tool.tool_type.value,
-                "is_available": self.detected_tool.is_available,
-                "install_path": str(self.detected_tool.install_path) if self.detected_tool.install_path else None,
-                "version": self.detected_tool.version,
-                "python_module_available": self.detected_tool.python_module_available,
-                "is_running": self.detected_tool.is_running,
-            }
-        return {
-            "tool_type": "none",
-            "is_available": False,
-        }
+        # Run async server
+        asyncio.run(self.protocol_handler.run())
 
