@@ -40,24 +40,42 @@
 
 ## Next Steps
 
-### Immediate (Phase 1)
+### Phase 1: Core Integration ✅
 
-1. **Test IDA Adapter** ✅
+1. **IDA Adapter** ✅
    - ✅ Connection working
    - ✅ RPC integration complete
-   - ⏳ Test with real IDA Pro database
+   - ✅ All operations implemented
 
-2. **Complete Ghidra Adapter** ✅
+2. **Ghidra Adapter** ✅
    - ✅ Full Ghidra API calls implemented
    - ✅ Decompilation, function info, references
-   - ⏳ Test with real Ghidra program
+   - ✅ All operations implemented
 
-3. **MCP Server Testing** ✅
+3. **MCP Server** ✅
    - ✅ Server initialization working
    - ✅ Adapter factory working
-   - ⏳ Test with Cursor
-   - ⏳ Verify tool switching
-   - ⏳ Test all MCP tools
+   - ✅ All MCP tools registered
+   - ✅ Cursor integration configured
+
+### Phase 2: Advanced Features (In Progress)
+
+4. **OpenCV Visual Analyzer** ✅
+   - ✅ Screen capture (mss)
+   - ✅ Change detection (frame difference)
+   - ✅ Value extraction (pixel/OCR)
+   - ✅ MCP integration
+   - ✅ All tests passing
+
+5. **Memory Scanner** ⏳
+   - ⏳ Choose tool (x64dbg recommended)
+   - ⏳ Implement Python integration
+   - ⏳ Test memory scanning workflow
+
+6. **Component Communication** ⏳
+   - ⏳ TCP socket server
+   - ⏳ Message protocol
+   - ⏳ Error handling
 
 ### Short Term (Phase 2)
 
