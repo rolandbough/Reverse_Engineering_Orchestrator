@@ -13,7 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from .detector import DetectionResult, ToolType
+from .types import DetectionResult, ToolType
 
 logger = logging.getLogger(__name__)
 
