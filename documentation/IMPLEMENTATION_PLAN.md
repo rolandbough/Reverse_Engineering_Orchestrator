@@ -115,76 +115,82 @@ Reverse_Engineering_Orchestrator/
 
 ## Phase 2: Tool Adapters
 
-### Step 2.1: Base Adapter Interface
+### Step 2.1: Base Adapter Interface ✅ COMPLETE
 
 **Tasks:**
-1. Define `BaseAdapter` abstract class with methods:
+1. ✅ Define `BaseAdapter` abstract class with methods:
    - `connect()` - Connect to tool
    - `disconnect()` - Disconnect from tool
    - `is_connected()` - Check connection status
    - `load_binary(path)` - Load binary file
-   - `decompile(address)` - Decompile at address
+   - `decompile_function(address)` - Decompile at address
    - `set_breakpoint(address, type)` - Set breakpoint
    - `read_memory(address, size)` - Read memory
    - `get_function_at(address)` - Get function info
-2. Define common data structures (Address, Function, Breakpoint)
+   - `find_references(address)` - Find references
+2. ✅ Define common data structures (AdapterResult, BreakpointType)
 3. Create adapter factory pattern
 
 **Deliverables:**
-- `BaseAdapter` abstract class
-- Common data structures
-- Adapter factory
+- ✅ `BaseAdapter` abstract class
+- ✅ Common data structures
+- ⏳ Adapter factory (next step)
 
 **ADR Notes:**
 - Adapter pattern provides unified interface
 - Each tool implements adapter interface
 - Factory selects appropriate adapter based on detection
+- See ADR-004 for tool integration methods
 
-### Step 2.2: IDA Pro Adapter
+### Step 2.2: IDA Pro Adapter ⏳ IN PROGRESS
 
 **Tasks:**
-1. Research IDAPython API
-2. Implement `IDAAdapter` extending `BaseAdapter`:
-   - Connection via IDAPython
-   - Binary loading using IDA API
-   - Decompilation using Hex-Rays (if available) or disassembly
-   - Breakpoint management
-   - Memory reading
-3. Handle IDA Pro specific quirks
-4. Add error handling for missing Hex-Rays decompiler
+1. ✅ Research IDAPython API
+2. ✅ Implement `IDAAdapter` structure extending `BaseAdapter`:
+   - ✅ Connection placeholder
+   - ⏳ Binary loading using IDA API (needs implementation)
+   - ⏳ Decompilation using Hex-Rays (if available) or disassembly
+   - ⏳ Breakpoint management
+   - ⏳ Memory reading
+3. ⏳ Handle IDA Pro specific quirks
+4. ⏳ Add error handling for missing Hex-Rays decompiler
 
 **Deliverables:**
-- `IDAAdapter` implementation
-- IDA Pro connection handling
-- Basic operations working
+- ✅ `IDAAdapter` structure (placeholder)
+- ⏳ IDA Pro connection handling (needs IDA Pro access)
+- ⏳ Basic operations working
 
 **ADR Notes:**
 - Requires IDAPython to be available
 - Hex-Rays decompiler is optional (fallback to disassembly)
 - Connection may require IDA Pro to be running
+- See ADR-004 for integration approach
+- **Decision:** Start with placeholder, implement when IDA Pro access available
 
-### Step 2.3: Ghidra Adapter
+### Step 2.3: Ghidra Adapter ✅ COMPLETE (Structure)
 
 **Tasks:**
-1. Research Ghidra Python API and ghidra_bridge
-2. Implement `GhidraAdapter` extending `BaseAdapter`:
-   - Connection via ghidra_bridge or direct API
-   - Binary loading using Ghidra API
-   - Decompilation using Ghidra decompiler
-   - Breakpoint management (if supported)
-   - Memory reading
-3. Handle Ghidra-specific requirements (Java bridge)
-4. Add error handling
+1. ✅ Research Ghidra Python API and pyGhidraRun
+2. ✅ Implement `GhidraAdapter` extending `BaseAdapter`:
+   - ✅ Connection via pyGhidraRun verification
+   - ✅ Binary loading script structure
+   - ✅ Decompilation script structure
+   - ✅ Breakpoint handling (not supported - static analysis tool)
+   - ✅ Memory reading script structure
+3. ✅ Handle Ghidra-specific requirements (pyGhidraRun subprocess)
+4. ✅ Add error handling
 
 **Deliverables:**
-- `GhidraAdapter` implementation
-- Ghidra connection handling
-- Basic operations working
+- ✅ `GhidraAdapter` implementation (structure complete)
+- ✅ Ghidra connection handling via pyGhidraRun
+- ⏳ Full operations working (needs testing with actual Ghidra)
 
 **ADR Notes:**
-- May require ghidra_bridge for Python integration
-- Ghidra runs as Java process, requires bridge
+- Uses pyGhidraRun subprocess execution (see ADR-004)
+- Scripts generated dynamically and executed via subprocess
+- Results communicated via JSON
 - Free alternative to IDA Pro
+- **Key Discovery:** pyGhidraRun located at `tools/ghidra/support/pyGhidraRun`
 
 ## Phase 3: MCP Tools Implementation
 

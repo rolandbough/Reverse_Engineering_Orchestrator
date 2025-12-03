@@ -115,17 +115,33 @@ class GhidraDetector:
         return paths
     
     def _is_ghidra_install(self, path: Path) -> bool:
-        """Check if path is a valid Ghidra installation"""
+        """
+        Check if path is a valid Ghidra installation
+        
+        ADR Note: Checks for key files including pyGhidraRun which is used
+        for Python script execution. This is critical for the adapter integration.
+        """
         # Look for key files/directories
         required_items = [
             path / "ghidraRun.bat",  # Windows
             path / "ghidraRun",      # Linux/macOS
-            path / "support",        # Support directory
+            path / "support",        # Support directory (contains pyGhidraRun)
             path / "Ghidra",         # Main Ghidra directory
         ]
         
-        # At least one should exist
-        return any(item.exists() for item in required_items)
+        # Check for pyGhidraRun specifically (important for Python integration)
+        pyghidra_items = [
+            path / "support" / "pyGhidraRun",      # Linux/macOS
+            path / "support" / "pyGhidraRun.bat",  # Windows
+        ]
+        
+        # At least one required item should exist
+        has_basic = any(item.exists() for item in required_items)
+        
+        # pyGhidraRun is preferred but not strictly required
+        has_pyghidra = any(item.exists() for item in pyghidra_items)
+        
+        return has_basic
     
     def _check_python_module(self) -> bool:
         """Check if ghidra_bridge module is available"""
