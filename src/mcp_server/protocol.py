@@ -19,6 +19,14 @@ from .config import ServerConfig
 from ..tool_detection import ToolDetector, ToolType, DetectionResult
 from ..adapters import BaseAdapter, AdapterFactory
 
+# Visual analyzer (optional, Phase 2)
+try:
+    from ..visual_analyzer import VisualAnalyzer
+    VISUAL_ANALYZER_AVAILABLE = True
+except ImportError:
+    VISUAL_ANALYZER_AVAILABLE = False
+    VisualAnalyzer = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,6 +43,14 @@ class MCPProtocolHandler:
         self.tool_detector = tool_detector
         self.server = Server(self.config.server_name)
         self.current_adapter: Optional[BaseAdapter] = None
+        
+        # Visual analyzer (Phase 2)
+        self.visual_analyzer: Optional[VisualAnalyzer] = None
+        if VISUAL_ANALYZER_AVAILABLE:
+            try:
+                self.visual_analyzer = VisualAnalyzer()
+            except Exception as e:
+                logger.warning(f"Failed to initialize visual analyzer: {e}")
         
         # Register MCP handlers
         self._register_handlers()
@@ -200,6 +216,14 @@ class MCPProtocolHandler:
                     return await self._handle_get_function_info(arguments)
                 elif name == "find_references":
                     return await self._handle_find_references(arguments)
+                elif name == "start_visual_monitoring":
+                    return await self._handle_start_visual_monitoring(arguments)
+                elif name == "stop_visual_monitoring":
+                    return await self._handle_stop_visual_monitoring(arguments)
+                elif name == "get_detected_changes":
+                    return await self._handle_get_detected_changes(arguments)
+                elif name == "analyze_region":
+                    return await self._handle_analyze_region(arguments)
                 else:
                     return [TextContent(
                         type="text",
@@ -227,6 +251,12 @@ class MCPProtocolHandler:
                     name="Tool Status",
                     description="Current reverse engineering tool status",
                     mimeType="application/json"
+                ),
+                EmbeddedResource(
+                    uri="reo://visual_analyzer_status",
+                    name="Visual Analyzer Status",
+                    description="Current visual analyzer monitoring status",
+                    mimeType="application/json"
                 )
             ]
         
@@ -237,6 +267,12 @@ class MCPProtocolHandler:
             if uri == "reo://tool_status":
                 status = self._get_tool_status()
                 return json.dumps(status, indent=2)
+            elif uri == "reo://visual_analyzer_status":
+                if VISUAL_ANALYZER_AVAILABLE and self.visual_analyzer:
+                    status = self.visual_analyzer.get_status()
+                    return json.dumps(status, indent=2)
+                else:
+                    return json.dumps({"available": False, "error": "Visual analyzer not initialized"})
             else:
                 raise ValueError(f"Unknown resource: {uri}")
     
@@ -396,6 +432,12 @@ class MCPProtocolHandler:
     
     async def _handle_find_references(self, arguments: Dict[str, Any]) -> List[TextContent]:
         """Handle find_references tool call"""
+        if not self.current_adapter:
+            return [TextContent(
+                type="text",
+                text="No reverse engineering tool connected. Use detect_re_tool first."
+            )]
+        
         address_str = arguments["address"]
         address = int(address_str, 16) if address_str.startswith("0x") else int(address_str, 16)
         
@@ -411,6 +453,88 @@ class MCPProtocolHandler:
                 type="text",
                 text=f"Failed to find references: {result.error}"
             )]
+    
+    async def _handle_start_visual_monitoring(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle start_visual_monitoring tool call"""
+        if not VISUAL_ANALYZER_AVAILABLE or not self.visual_analyzer:
+            return [TextContent(
+                type="text",
+                text="Visual analyzer not available. Install dependencies: pip install opencv-python mss numpy"
+            )]
+        
+        regions = arguments.get("regions", [])
+        change_threshold = arguments.get("change_threshold", 0.1)
+        capture_interval = arguments.get("capture_interval", 0.1)
+        
+        # Update analyzer settings
+        self.visual_analyzer.change_detector.threshold = change_threshold
+        self.visual_analyzer.capture_interval = capture_interval
+        
+        # Start monitoring
+        success = self.visual_analyzer.start_monitoring(regions)
+        
+        if success:
+            return [TextContent(
+                type="text",
+                text=f"Started monitoring {len(regions)} regions:\n{json.dumps(regions, indent=2)}"
+            )]
+        else:
+            return [TextContent(
+                type="text",
+                text="Failed to start monitoring. Monitoring may already be in progress."
+            )]
+    
+    async def _handle_stop_visual_monitoring(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle stop_visual_monitoring tool call"""
+        if not VISUAL_ANALYZER_AVAILABLE or not self.visual_analyzer:
+            return [TextContent(
+                type="text",
+                text="Visual analyzer not available"
+            )]
+        
+        self.visual_analyzer.stop_monitoring()
+        
+        return [TextContent(
+            type="text",
+            text="Visual monitoring stopped"
+        )]
+    
+    async def _handle_get_detected_changes(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle get_detected_changes tool call"""
+        if not VISUAL_ANALYZER_AVAILABLE or not self.visual_analyzer:
+            return [TextContent(
+                type="text",
+                text="Visual analyzer not available"
+            )]
+        
+        limit = arguments.get("limit", 10)
+        changes = self.visual_analyzer.get_detected_changes(limit=limit)
+        
+        return [TextContent(
+            type="text",
+            text=f"Detected {len(changes)} changes:\n{json.dumps(changes, indent=2, default=str)}"
+        )]
+    
+    async def _handle_analyze_region(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle analyze_region tool call"""
+        if not VISUAL_ANALYZER_AVAILABLE or not self.visual_analyzer:
+            return [TextContent(
+                type="text",
+                text="Visual analyzer not available. Install dependencies: pip install opencv-python mss numpy"
+            )]
+        
+        x = arguments["x"]
+        y = arguments["y"]
+        width = arguments["width"]
+        height = arguments["height"]
+        region_name = arguments.get("region_name", "region")
+        
+        result = self.visual_analyzer.analyze_region(x, y, width, height, region_name)
+        
+        return [TextContent(
+            type="text",
+            text=f"Region analysis:\n{json.dumps(result, indent=2, default=str)}"
+        )]
     
     def _get_tool_status(self) -> Dict[str, Any]:
         """Get current tool status"""

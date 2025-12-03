@@ -1,0 +1,194 @@
+"""
+Main Visual Analyzer
+
+ADR Note: Coordinates screen capture, change detection, and value extraction.
+Main entry point for visual analysis operations.
+"""
+
+import logging
+import threading
+import time
+from typing import Optional, Dict, List, Any
+from pathlib import Path
+
+from .screen_capture import ScreenCapture
+from .change_detector import ChangeDetector
+from .value_extractor import ValueExtractor
+
+logger = logging.getLogger(__name__)
+
+
+class VisualAnalyzer:
+    """
+    Main visual analyzer class
+    
+    ADR Note: Coordinates all visual analysis components. Can run in
+    background thread for continuous monitoring or on-demand for single captures.
+    """
+    
+    def __init__(
+        self,
+        change_threshold: float = 0.1,
+        capture_interval: float = 0.1,
+        use_ocr: bool = False
+    ):
+        """
+        Initialize visual analyzer
+        
+        Args:
+            change_threshold: Change detection threshold (0.0-1.0)
+            capture_interval: Time between captures (seconds)
+            use_ocr: Enable OCR for text extraction
+        """
+        self.screen_capture = ScreenCapture()
+        self.change_detector = ChangeDetector(threshold=change_threshold)
+        self.value_extractor = ValueExtractor(use_ocr=use_ocr)
+        
+        self.capture_interval = capture_interval
+        self.monitoring = False
+        self.monitoring_thread: Optional[threading.Thread] = None
+        
+        self.monitoring_regions: List[Dict[str, Any]] = []
+        self.detected_changes: List[Dict[str, Any]] = []
+        self.max_changes_history = 100
+    
+    def start_monitoring(
+        self,
+        regions: List[Dict[str, Any]],
+        callback: Optional[callable] = None
+    ) -> bool:
+        """
+        Start continuous monitoring
+        
+        Args:
+            regions: List of regions to monitor:
+                [{"name": "score", "x": 100, "y": 200, "w": 200, "h": 50}, ...]
+            callback: Optional callback function for detected changes
+        
+        Returns:
+            True if monitoring started successfully
+        """
+        if self.monitoring:
+            logger.warning("Monitoring already in progress")
+            return False
+        
+        self.monitoring_regions = regions
+        self.monitoring = True
+        
+        def monitor_loop():
+            while self.monitoring:
+                try:
+                    for region in self.monitoring_regions:
+                        result = self.analyze_region(
+                            region["x"],
+                            region["y"],
+                            region["w"],
+                            region["h"],
+                            region.get("name", "unknown")
+                        )
+                        
+                        if result.get("changed") and callback:
+                            callback(result)
+                        
+                        if result.get("changed"):
+                            self.detected_changes.append(result)
+                            # Keep only recent changes
+                            if len(self.detected_changes) > self.max_changes_history:
+                                self.detected_changes.pop(0)
+                    
+                    time.sleep(self.capture_interval)
+                
+                except Exception as e:
+                    logger.error(f"Error in monitoring loop: {e}")
+                    time.sleep(self.capture_interval)
+        
+        self.monitoring_thread = threading.Thread(target=monitor_loop, daemon=True)
+        self.monitoring_thread.start()
+        
+        logger.info(f"Started monitoring {len(regions)} regions")
+        return True
+    
+    def stop_monitoring(self):
+        """Stop continuous monitoring"""
+        self.monitoring = False
+        if self.monitoring_thread:
+            self.monitoring_thread.join(timeout=2.0)
+        self.change_detector.reset()
+        logger.info("Stopped monitoring")
+    
+    def analyze_region(
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        region_name: str = "region"
+    ) -> Dict[str, Any]:
+        """
+        Analyze a single region
+        
+        Args:
+            x, y, width, height: Region coordinates
+            region_name: Name for this region
+        
+        Returns:
+            Dictionary with analysis results:
+            {
+                "region_name": str,
+                "coordinates": {"x": int, "y": int, "w": int, "h": int},
+                "changed": bool,
+                "change_percentage": float,
+                "extracted_value": {...},
+                "timestamp": str
+            }
+        """
+        # Capture region
+        frame = self.screen_capture.capture_region(x, y, width, height)
+        if frame is None:
+            return {
+                "region_name": region_name,
+                "error": "Failed to capture region",
+                "changed": False
+            }
+        
+        # Detect changes
+        change_info = self.change_detector.detect_changes(frame)
+        
+        # Extract value if changed
+        extracted_value = None
+        if change_info.get("changed"):
+            extracted_value = self.value_extractor.extract_value(frame)
+        
+        result = {
+            "region_name": region_name,
+            "coordinates": {"x": x, "y": y, "w": width, "h": height},
+            "changed": change_info.get("changed", False),
+            "change_percentage": change_info.get("change_percentage", 0.0),
+            "changed_regions": change_info.get("changed_regions", []),
+            "extracted_value": extracted_value,
+            "timestamp": time.time()
+        }
+        
+        return result
+    
+    def get_detected_changes(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get list of detected changes"""
+        changes = self.detected_changes
+        if limit:
+            changes = changes[-limit:]
+        return changes
+    
+    def clear_history(self):
+        """Clear detected changes history"""
+        self.detected_changes = []
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get current analyzer status"""
+        return {
+            "monitoring": self.monitoring,
+            "regions_count": len(self.monitoring_regions),
+            "changes_detected": len(self.detected_changes),
+            "capture_interval": self.capture_interval,
+            "change_threshold": self.change_detector.threshold
+        }
+

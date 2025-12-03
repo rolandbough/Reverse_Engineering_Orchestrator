@@ -24,3 +24,10 @@ mypy>=1.5.0
 # idapython  # IDA Pro Python API (installed via IDA Pro)
 # ghidra_bridge  # Ghidra Python bridge (installed separately)
 
+# Phase 2: Visual Analyzer
+opencv-python>=4.8.0  # Computer vision
+mss>=9.0.0  # Fast screen capture
+numpy>=1.24.0  # Array operations
+# Optional: OCR support
+# pytesseract>=0.3.10  # Text extraction (requires Tesseract OCR installed)
+
