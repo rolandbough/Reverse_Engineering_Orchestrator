@@ -76,8 +76,19 @@ class GhidraDetector:
         )
     
     def _get_common_paths(self) -> list[Path]:
-        """Get common Ghidra installation paths"""
+        """
+        Get common Ghidra installation paths
+        
+        ADR Note: Includes project-local tools directory for development.
+        Checks project-relative path first, then system-wide locations.
+        """
         paths = []
+        
+        # Project-local tools directory (for development)
+        project_root = Path(__file__).parent.parent.parent.parent
+        project_ghidra = project_root / "tools" / "ghidra"
+        if project_ghidra.exists():
+            paths.append(project_ghidra)
         
         if sys.platform == "win32":
             # Windows common paths

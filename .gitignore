@@ -26,3 +26,7 @@ Thumbs.db
 .env.local
 automation.log
 
+# External tools (large binaries, not committed)
+tools/ghidra/
+tools/ida/
+
