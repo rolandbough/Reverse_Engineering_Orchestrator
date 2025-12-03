@@ -27,6 +27,14 @@ except ImportError:
     VISUAL_ANALYZER_AVAILABLE = False
     VisualAnalyzer = None
 
+# Workflow orchestrator (Phase 3)
+try:
+    from ..orchestrator import WorkflowOrchestrator
+    ORCHESTRATOR_AVAILABLE = True
+except ImportError:
+    ORCHESTRATOR_AVAILABLE = False
+    WorkflowOrchestrator = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -51,6 +59,17 @@ class MCPProtocolHandler:
                 self.visual_analyzer = VisualAnalyzer()
             except Exception as e:
                 logger.warning(f"Failed to initialize visual analyzer: {e}")
+        
+        # Workflow orchestrator (Phase 3)
+        self.orchestrator: Optional[WorkflowOrchestrator] = None
+        if ORCHESTRATOR_AVAILABLE:
+            try:
+                self.orchestrator = WorkflowOrchestrator()
+                # Connect orchestrator to RE adapter when available
+                if self.current_adapter:
+                    self.orchestrator.re_adapter = self.current_adapter
+            except Exception as e:
+                logger.warning(f"Failed to initialize orchestrator: {e}")
         
         # Register MCP handlers
         self._register_handlers()
@@ -224,6 +243,14 @@ class MCPProtocolHandler:
                     return await self._handle_get_detected_changes(arguments)
                 elif name == "analyze_region":
                     return await self._handle_analyze_region(arguments)
+                elif name == "start_workflow":
+                    return await self._handle_start_workflow(arguments)
+                elif name == "stop_workflow":
+                    return await self._handle_stop_workflow(arguments)
+                elif name == "get_workflow_status":
+                    return await self._handle_get_workflow_status(arguments)
+                elif name == "set_breakpoints_at_addresses":
+                    return await self._handle_set_breakpoints_at_addresses(arguments)
                 else:
                     return [TextContent(
                         type="text",
@@ -308,6 +335,10 @@ class MCPProtocolHandler:
                 "success": False,
                 "error": f"Failed to connect to tool: {result.error}"
             }
+        
+        # Connect orchestrator to adapter if available
+        if self.orchestrator:
+            self.orchestrator.re_adapter = self.current_adapter
         
         return {"success": True}
     
@@ -535,6 +566,116 @@ class MCPProtocolHandler:
             type="text",
             text=f"Region analysis:\n{json.dumps(result, indent=2, default=str)}"
         )]
+    
+    async def _handle_start_workflow(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle start_workflow tool call"""
+        if not ORCHESTRATOR_AVAILABLE or not self.orchestrator:
+            return [TextContent(
+                type="text",
+                text="Workflow orchestrator not available. Install dependencies: pip install opencv-python mss numpy pymem"
+            )]
+        
+        process_name = arguments.get("process_name")
+        process_id = arguments.get("process_id")
+        regions = arguments.get("regions", [])
+        value_type = arguments.get("value_type", "int32")
+        
+        # Update orchestrator process info if provided
+        if process_name:
+            self.orchestrator.process_name = process_name
+        if process_id:
+            self.orchestrator.process_id = process_id
+        
+        # Connect orchestrator to RE adapter if available
+        if self.current_adapter:
+            self.orchestrator.re_adapter = self.current_adapter
+        
+        # Start workflow
+        result = self.orchestrator.start_workflow(regions, value_type)
+        
+        if result["success"]:
+            return [TextContent(
+                type="text",
+                text=f"Workflow started:\n{json.dumps(result, indent=2)}"
+            )]
+        else:
+            return [TextContent(
+                type="text",
+                text=f"Failed to start workflow: {result.get('error', 'Unknown error')}"
+            )]
+    
+    async def _handle_stop_workflow(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle stop_workflow tool call"""
+        if not ORCHESTRATOR_AVAILABLE or not self.orchestrator:
+            return [TextContent(
+                type="text",
+                text="Workflow orchestrator not available"
+            )]
+        
+        result = self.orchestrator.stop_workflow()
+        
+        return [TextContent(
+            type="text",
+            text=f"Workflow stopped:\n{json.dumps(result, indent=2)}"
+        )]
+    
+    async def _handle_get_workflow_status(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle get_workflow_status tool call"""
+        if not ORCHESTRATOR_AVAILABLE or not self.orchestrator:
+            return [TextContent(
+                type="text",
+                text="Workflow orchestrator not available"
+            )]
+        
+        status = self.orchestrator.get_workflow_status()
+        
+        return [TextContent(
+            type="text",
+            text=f"Workflow status:\n{json.dumps(status, indent=2, default=str)}"
+        )]
+    
+    async def _handle_set_breakpoints_at_addresses(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle set_breakpoints_at_addresses tool call"""
+        if not ORCHESTRATOR_AVAILABLE or not self.orchestrator:
+            return [TextContent(
+                type="text",
+                text="Workflow orchestrator not available"
+            )]
+        
+        if not self.current_adapter:
+            return [TextContent(
+                type="text",
+                text="No reverse engineering tool connected. Use detect_re_tool first."
+            )]
+        
+        addresses = arguments.get("addresses", [])
+        
+        # Set breakpoints via orchestrator
+        result = self.orchestrator.set_breakpoints(addresses)
+        
+        if result["success"]:
+            # Actually set breakpoints using adapter
+            breakpoint_results = []
+            for addr in result["addresses"]:
+                bp_result = self.current_adapter.set_breakpoint(
+                    int(addr, 16) if isinstance(addr, str) else addr,
+                    "write"  # Hardware write breakpoint
+                )
+                breakpoint_results.append({
+                    "address": addr,
+                    "success": bp_result.success,
+                    "error": bp_result.error
+                })
+            
+            return [TextContent(
+                type="text",
+                text=f"Breakpoints set:\n{json.dumps({'summary': result, 'breakpoints': breakpoint_results}, indent=2)}"
+            )]
+        else:
+            return [TextContent(
+                type="text",
+                text=f"Failed to set breakpoints: {result.get('error', 'Unknown error')}"
+            )]
     
     def _get_tool_status(self) -> Dict[str, Any]:
         """Get current tool status"""
