@@ -87,12 +87,46 @@ $serverConfig | Add-Member -MemberType NoteProperty -Name "alwaysAllow" -Value @
     "detect_re_tool"
 )
 
-# Add or update our server config
+# Add or update our server config (preserving other servers)
 $config.mcpServers | Add-Member -MemberType NoteProperty -Name "reverse-engineering-orchestrator" -Value $serverConfig -Force
 
-# Write config
+# Write config with proper formatting (no BOM)
 Write-Host "Writing configuration to: $mcpConfigPath" -ForegroundColor Green
-$config | ConvertTo-Json -Depth 10 | Set-Content $mcpConfigPath -Encoding UTF8 -NoNewline
+try {
+    # Write compact JSON first (PowerShell's ConvertTo-Json has formatting issues)
+    $json = $config | ConvertTo-Json -Depth 10 -Compress
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($mcpConfigPath, $json, $utf8NoBom)
+    
+    # Format using Python for consistent, readable JSON
+    $formatScript = Join-Path $ProjectPath "format_mcp_json.py"
+    if (Test-Path $formatScript) {
+        $pythonExe = Join-Path $ProjectPath "venv\Scripts\python.exe"
+        if (-not (Test-Path $pythonExe)) {
+            $pythonExe = "python"
+        }
+        & $pythonExe $formatScript $mcpConfigPath 2>&1 | Out-Null
+    }
+    
+    Write-Host "✅ Configuration saved (preserving existing servers)" -ForegroundColor Green
+} catch {
+    Write-Host "❌ Error writing config: $_" -ForegroundColor Red
+    exit 1
+}
+
+# Verify JSON is valid
+try {
+    $verify = Get-Content $mcpConfigPath -Raw -Encoding UTF8
+    if ($verify.StartsWith([char]0xFEFF)) {
+        $verify = $verify.Substring(1)
+    }
+    $null = $verify | ConvertFrom-Json -ErrorAction Stop
+    Write-Host "✅ JSON validation passed" -ForegroundColor Green
+} catch {
+    Write-Host "❌ JSON validation failed: $_" -ForegroundColor Red
+    Write-Host "   Run: python format_mcp_json.py" -ForegroundColor Yellow
+    exit 1
+}
 
 Write-Host "`n✅ Configuration complete!" -ForegroundColor Green
 Write-Host "`nNext steps:" -ForegroundColor Cyan
