@@ -198,6 +198,111 @@ class MCPProtocolHandler:
                         "required": ["address"]
                     }
                 ),
+                Tool(
+                    name="start_visual_monitoring",
+                    description="Start monitoring screen regions for changes",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "regions": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "name": {"type": "string"},
+                                        "x": {"type": "integer"},
+                                        "y": {"type": "integer"},
+                                        "w": {"type": "integer"},
+                                        "h": {"type": "integer"}
+                                    }
+                                }
+                            },
+                            "change_threshold": {"type": "number", "default": 0.1},
+                            "capture_interval": {"type": "number", "default": 0.1}
+                        }
+                    }
+                ),
+                Tool(
+                    name="stop_visual_monitoring",
+                    description="Stop visual monitoring",
+                    inputSchema={"type": "object", "properties": {}}
+                ),
+                Tool(
+                    name="get_detected_changes",
+                    description="Get list of detected visual changes",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "limit": {"type": "integer", "default": 10}
+                        }
+                    }
+                ),
+                Tool(
+                    name="analyze_region",
+                    description="Analyze a specific screen region for changes",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "x": {"type": "integer", "description": "X coordinate"},
+                            "y": {"type": "integer", "description": "Y coordinate"},
+                            "width": {"type": "integer", "description": "Region width"},
+                            "height": {"type": "integer", "description": "Region height"},
+                            "region_name": {"type": "string", "description": "Name for this region"}
+                        },
+                        "required": ["x", "y", "width", "height"]
+                    }
+                ),
+                Tool(
+                    name="capture_process_window",
+                    description="Capture full window screenshot of a process",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "process_name": {
+                                "type": "string",
+                                "description": "Process name (e.g., 'game.exe')"
+                            },
+                            "process_id": {
+                                "type": "integer",
+                                "description": "Process ID (PID) - alternative to process_name"
+                            }
+                        }
+                    }
+                ),
+                Tool(
+                    name="select_region_from_screenshot",
+                    description="Select a region of interest from a screenshot (returns region coordinates)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "screenshot_base64": {
+                                "type": "string",
+                                "description": "Base64-encoded screenshot (from capture_process_window)"
+                            },
+                            "x": {
+                                "type": "integer",
+                                "description": "X coordinate of region top-left corner"
+                            },
+                            "y": {
+                                "type": "integer",
+                                "description": "Y coordinate of region top-left corner"
+                            },
+                            "width": {
+                                "type": "integer",
+                                "description": "Width of region"
+                            },
+                            "height": {
+                                "type": "integer",
+                                "description": "Height of region"
+                            },
+                            "region_name": {
+                                "type": "string",
+                                "description": "Name for this region"
+                            }
+                        },
+                        "required": ["x", "y", "width", "height"]
+                    }
+                ),
             ]
         
         # Handle tool calls
@@ -243,6 +348,10 @@ class MCPProtocolHandler:
                     return await self._handle_get_detected_changes(arguments)
                 elif name == "analyze_region":
                     return await self._handle_analyze_region(arguments)
+                elif name == "capture_process_window":
+                    return await self._handle_capture_process_window(arguments)
+                elif name == "select_region_from_screenshot":
+                    return await self._handle_select_region_from_screenshot(arguments)
                 elif name == "start_workflow":
                     return await self._handle_start_workflow(arguments)
                 elif name == "stop_workflow":
@@ -565,6 +674,111 @@ class MCPProtocolHandler:
         return [TextContent(
             type="text",
             text=f"Region analysis:\n{json.dumps(result, indent=2, default=str)}"
+        )]
+    
+    async def _handle_capture_process_window(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle capture_process_window tool call"""
+        if not VISUAL_ANALYZER_AVAILABLE or not self.visual_analyzer:
+            return [TextContent(
+                type="text",
+                text="Visual analyzer not available. Install dependencies: pip install opencv-python mss numpy pywin32"
+            )]
+        
+        process_name = arguments.get("process_name")
+        process_id = arguments.get("process_id")
+        
+        if not process_name and not process_id:
+            return [TextContent(
+                type="text",
+                text="Error: Either process_name or process_id must be provided"
+            )]
+        
+        result = self.visual_analyzer.capture_process_window(
+            process_name=process_name,
+            process_id=process_id
+        )
+        
+        if result is None:
+            return [TextContent(
+                type="text",
+                text=f"Failed to capture window for process: {process_name or process_id}"
+            )]
+        
+        # Return screenshot as base64 and metadata
+        return [
+            TextContent(
+                type="text",
+                text=f"Screenshot captured:\n{json.dumps({k: v for k, v in result.items() if k != 'screenshot_base64'}, indent=2)}"
+            ),
+            ImageContent(
+                type="image",
+                data=result["screenshot_base64"],
+                mimeType="image/png"
+            ) if result.get("screenshot_base64") else TextContent(
+                type="text",
+                text="Screenshot data available in result"
+            )
+        ]
+    
+    async def _handle_select_region_from_screenshot(self, arguments: Dict[str, Any]) -> List[TextContent]:
+        """Handle select_region_from_screenshot tool call"""
+        if not VISUAL_ANALYZER_AVAILABLE or not self.visual_analyzer:
+            return [TextContent(
+                type="text",
+                text="Visual analyzer not available"
+            )]
+        
+        x = arguments["x"]
+        y = arguments["y"]
+        width = arguments["width"]
+        height = arguments["height"]
+        region_name = arguments.get("region_name", "selected_region")
+        
+        # Validate region coordinates if screenshot provided
+        screenshot_base64 = arguments.get("screenshot_base64")
+        if screenshot_base64:
+            try:
+                import base64
+                import cv2
+                import numpy as np
+                
+                img_data = base64.b64decode(screenshot_base64)
+                nparr = np.frombuffer(img_data, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                
+                if img is None:
+                    return [TextContent(
+                        type="text",
+                        text="Error: Invalid screenshot data"
+                    )]
+                
+                img_height, img_width = img.shape[:2]
+                
+                # Validate coordinates
+                if x < 0 or y < 0 or x + width > img_width or y + height > img_height:
+                    return [TextContent(
+                        type="text",
+                        text=f"Error: Region coordinates out of bounds. Image size: {img_width}x{img_height}"
+                    )]
+            except Exception as e:
+                logger.error(f"Error validating screenshot: {e}")
+        
+        # Return region information
+        region_info = {
+            "region_name": region_name,
+            "coordinates": {
+                "x": x,
+                "y": y,
+                "width": width,
+                "height": height
+            },
+            "ready_for_monitoring": True
+        }
+        
+        return [TextContent(
+            type="text",
+            text=f"Region selected:\n{json.dumps(region_info, indent=2)}\n\n"
+                 f"You can now use this region with start_visual_monitoring or start_workflow tools."
         )]
     
     async def _handle_start_workflow(self, arguments: Dict[str, Any]) -> List[TextContent]:

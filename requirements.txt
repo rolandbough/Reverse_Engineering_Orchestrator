@@ -34,3 +34,6 @@ numpy>=1.24.0  # Array operations
 # Phase 3: Memory Scanner
 pymem>=1.13.0  # Windows memory access for custom scanner
 
+# Windows-specific dependencies
+pywin32>=306; sys_platform == "win32"  # Windows API access for window capture
+

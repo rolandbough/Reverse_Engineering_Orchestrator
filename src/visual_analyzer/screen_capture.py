@@ -95,30 +95,109 @@ class ScreenCapture:
     def capture_window(
         self,
         window_title: Optional[str] = None,
-        window_handle: Optional[int] = None
+        window_handle: Optional[int] = None,
+        process_name: Optional[str] = None,
+        process_id: Optional[int] = None
     ) -> Optional[np.ndarray]:
         """
         Capture a specific window
         
-        ADR Note: Window capture requires platform-specific code.
-        For now, this is a placeholder. Full implementation would use
-        win32gui (Windows) or xdotool (Linux) to get window coordinates.
+        ADR Note: Window capture uses platform-specific APIs to find windows.
+        On Windows, uses win32gui to get window coordinates by process name/ID.
         
         Args:
             window_title: Window title to find
             window_handle: Window handle (Windows)
+            process_name: Process name (e.g., "game.exe")
+            process_id: Process ID (PID)
         
         Returns:
             NumPy array or None on error
         """
-        # TODO: Implement window capture
-        # Would need:
-        # - Windows: win32gui to get window rect
-        # - Linux: xdotool or similar
-        # - macOS: AppleScript or similar
+        import sys
         
-        logger.warning("Window capture not yet implemented. Use capture_region instead.")
-        return None
+        if sys.platform == "win32":
+            return self._capture_window_windows(
+                window_title, window_handle, process_name, process_id
+            )
+        else:
+            logger.warning("Window capture by process not yet implemented for this platform")
+            return None
+    
+    def _capture_window_windows(
+        self,
+        window_title: Optional[str],
+        window_handle: Optional[int],
+        process_name: Optional[str],
+        process_id: Optional[int]
+    ) -> Optional[np.ndarray]:
+        """Capture window on Windows using win32gui"""
+        try:
+            import win32gui
+            import win32process
+        except ImportError:
+            logger.error("win32gui not available. Install with: pip install pywin32")
+            return None
+        
+        hwnd = None
+        
+        # Find window by process name or ID
+        if process_name or process_id:
+            def enum_windows_callback(hwnd, windows):
+                if win32gui.IsWindowVisible(hwnd):
+                    try:
+                        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                        if process_id and pid == process_id:
+                            windows.append(hwnd)
+                        elif process_name:
+                            # Get process name
+                            try:
+                                import psutil
+                                proc = psutil.Process(pid)
+                                if proc.name().lower() == process_name.lower():
+                                    windows.append(hwnd)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+                return True
+            
+            windows = []
+            win32gui.EnumWindows(enum_windows_callback, windows)
+            
+            if windows:
+                hwnd = windows[0]  # Use first matching window
+            else:
+                logger.warning(f"Window not found for process: {process_name or process_id}")
+                return None
+        
+        # Find window by title
+        elif window_title:
+            hwnd = win32gui.FindWindow(None, window_title)
+            if not hwnd:
+                logger.warning(f"Window not found with title: {window_title}")
+                return None
+        
+        # Use provided handle
+        elif window_handle:
+            hwnd = window_handle
+        
+        if not hwnd:
+            logger.error("No window handle found")
+            return None
+        
+        # Get window rectangle
+        try:
+            left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+            width = right - left
+            height = bottom - top
+            
+            # Capture the window region
+            return self.capture_region(left, top, width, height)
+        
+        except Exception as e:
+            logger.error(f"Failed to capture window: {e}")
+            return None
     
     def capture_full_screen(self, monitor: Optional[int] = None) -> Optional[np.ndarray]:
         """
@@ -158,6 +237,35 @@ class ScreenCapture:
         except Exception as e:
             logger.error(f"Failed to save screenshot: {e}")
             return False
+    
+    def screenshot_to_base64(self, image: np.ndarray) -> Optional[str]:
+        """
+        Convert screenshot to base64 string for transmission
+        
+        ADR Note: Useful for sending screenshots via MCP or other protocols.
+        Returns base64-encoded PNG image.
+        """
+        if not CV2_AVAILABLE:
+            logger.error("OpenCV not available, cannot encode screenshot")
+            return None
+        
+        try:
+            import base64
+            import io
+            
+            # Encode image as PNG
+            success, buffer = cv2.imencode('.png', image)
+            if not success:
+                logger.error("Failed to encode image")
+                return None
+            
+            # Convert to base64
+            img_base64 = base64.b64encode(buffer).decode('utf-8')
+            return img_base64
+        
+        except Exception as e:
+            logger.error(f"Failed to convert screenshot to base64: {e}")
+            return None
     
     def get_monitors(self) -> list:
         """Get list of available monitors"""

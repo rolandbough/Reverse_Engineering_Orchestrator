@@ -182,6 +182,48 @@ class VisualAnalyzer:
         """Clear detected changes history"""
         self.detected_changes = []
     
+    def capture_process_window(
+        self,
+        process_name: Optional[str] = None,
+        process_id: Optional[int] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Capture full window of a process
+        
+        ADR Note: Captures the entire window of a target process.
+        Returns screenshot and window information.
+        
+        Args:
+            process_name: Process name (e.g., "game.exe")
+            process_id: Process ID (PID)
+        
+        Returns:
+            Dictionary with screenshot data and window info, or None on error
+        """
+        screenshot = self.screen_capture.capture_window(
+            process_name=process_name,
+            process_id=process_id
+        )
+        
+        if screenshot is None:
+            return None
+        
+        # Convert to base64 for transmission
+        screenshot_base64 = self.screen_capture.screenshot_to_base64(screenshot)
+        
+        return {
+            "screenshot_base64": screenshot_base64,
+            "width": screenshot.shape[1],
+            "height": screenshot.shape[0],
+            "process_name": process_name,
+            "process_id": process_id,
+            "format": "png"
+        }
+    
+    def save_screenshot(self, image: np.ndarray, path: Path) -> bool:
+        """Save screenshot to file"""
+        return self.screen_capture.save_screenshot(image, path)
+    
     def get_status(self) -> Dict[str, Any]:
         """Get current analyzer status"""
         return {
