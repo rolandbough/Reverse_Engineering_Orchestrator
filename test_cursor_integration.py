@@ -53,7 +53,7 @@ def check_python_path():
         return False
     
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, 'r', encoding='utf-8-sig') as f:
             config = json.load(f)
         
         server_config = config.get("mcpServers", {}).get("reverse-engineering-orchestrator")
@@ -79,7 +79,7 @@ def check_project_path():
         return False
     
     try:
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with open(config_path, 'r', encoding='utf-8-sig') as f:
             config = json.load(f)
         
         server_config = config.get("mcpServers", {}).get("reverse-engineering-orchestrator")

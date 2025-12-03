@@ -49,43 +49,50 @@ $config = @{}
 if (Test-Path $mcpConfigPath) {
     Write-Host "Reading existing mcp.json..." -ForegroundColor Green
     try {
-        $config = Get-Content $mcpConfigPath -Raw | ConvertFrom-Json | ConvertTo-Json -Depth 10 | ConvertFrom-Json
+        # Read and parse JSON, handling UTF-8 BOM
+        $jsonContent = Get-Content $mcpConfigPath -Raw -Encoding UTF8
+        # Remove BOM if present
+        if ($jsonContent.StartsWith([char]0xFEFF)) {
+            $jsonContent = $jsonContent.Substring(1)
+        }
+        $config = $jsonContent | ConvertFrom-Json
     } catch {
         Write-Host "Warning: Could not parse existing mcp.json, creating new one" -ForegroundColor Yellow
-        $config = @{}
+        Write-Host "  Error: $_" -ForegroundColor Yellow
+        $config = New-Object PSObject
     }
 } else {
     Write-Host "Creating new mcp.json..." -ForegroundColor Green
-    $config = @{}
+    $config = New-Object PSObject
 }
 
 # Ensure mcpServers exists
-if (-not $config.mcpServers) {
-    $config | Add-Member -MemberType NoteProperty -Name "mcpServers" -Value @{} -Force
+if (-not $config.PSObject.Properties['mcpServers']) {
+    $config | Add-Member -MemberType NoteProperty -Name "mcpServers" -Value (New-Object PSObject) -Force
 }
+
+# Create server config object
+$serverConfig = New-Object PSObject
+$serverConfig | Add-Member -MemberType NoteProperty -Name "command" -Value $PythonPath
+$serverConfig | Add-Member -MemberType NoteProperty -Name "args" -Value @("-m", "src.mcp_server")
+$serverConfig | Add-Member -MemberType NoteProperty -Name "cwd" -Value $ProjectPath
+$serverConfig | Add-Member -MemberType NoteProperty -Name "timeout" -Value 1800
+$serverConfig | Add-Member -MemberType NoteProperty -Name "disabled" -Value $false
+$serverConfig | Add-Member -MemberType NoteProperty -Name "autoApprove" -Value @(
+    "detect_re_tool",
+    "get_function_info",
+    "find_references"
+)
+$serverConfig | Add-Member -MemberType NoteProperty -Name "alwaysAllow" -Value @(
+    "detect_re_tool"
+)
 
 # Add or update our server config
-$serverConfig = @{
-    command = $PythonPath
-    args = @("-m", "src.mcp_server")
-    cwd = $ProjectPath
-    timeout = 1800
-    disabled = $false
-    autoApprove = @(
-        "detect_re_tool",
-        "get_function_info",
-        "find_references"
-    )
-    alwaysAllow = @(
-        "detect_re_tool"
-    )
-}
-
-$config.mcpServers."reverse-engineering-orchestrator" = $serverConfig
+$config.mcpServers | Add-Member -MemberType NoteProperty -Name "reverse-engineering-orchestrator" -Value $serverConfig -Force
 
 # Write config
 Write-Host "Writing configuration to: $mcpConfigPath" -ForegroundColor Green
-$config | ConvertTo-Json -Depth 10 | Set-Content $mcpConfigPath -Encoding UTF8
+$config | ConvertTo-Json -Depth 10 | Set-Content $mcpConfigPath -Encoding UTF8 -NoNewline
 
 Write-Host "`n✅ Configuration complete!" -ForegroundColor Green
 Write-Host "`nNext steps:" -ForegroundColor Cyan
