@@ -281,26 +281,44 @@ class MCPProtocolHandler:
                             },
                             "x": {
                                 "type": "integer",
-                                "description": "X coordinate of region top-left corner"
+                                "description": "X coordinate of region top-left corner (optional if using interactive mode)"
                             },
                             "y": {
                                 "type": "integer",
-                                "description": "Y coordinate of region top-left corner"
+                                "description": "Y coordinate of region top-left corner (optional if using interactive mode)"
                             },
                             "width": {
                                 "type": "integer",
-                                "description": "Width of region"
+                                "description": "Width of region (optional if using interactive mode)"
                             },
                             "height": {
                                 "type": "integer",
-                                "description": "Height of region"
+                                "description": "Height of region (optional if using interactive mode)"
                             },
                             "region_name": {
                                 "type": "string",
                                 "description": "Name for this region"
+                            },
+                            "interactive": {
+                                "type": "boolean",
+                                "description": "Use interactive rectangle selection (opens window to drag and select)",
+                                "default": False
+                            }
+                        }
+                    }
+                ),
+                Tool(
+                    name="select_region_interactive",
+                    description="Interactively select a region by dragging a rectangle on the screenshot (opens a window)",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "screenshot_base64": {
+                                "type": "string",
+                                "description": "Base64-encoded screenshot (from capture_process_window)"
                             }
                         },
-                        "required": ["x", "y", "width", "height"]
+                        "required": ["screenshot_base64"]
                     }
                 ),
             ]
@@ -352,6 +370,8 @@ class MCPProtocolHandler:
                     return await self._handle_capture_process_window(arguments)
                 elif name == "select_region_from_screenshot":
                     return await self._handle_select_region_from_screenshot(arguments)
+                elif name == "select_region_interactive":
+                    return await self._handle_select_region_interactive(arguments)
                 elif name == "start_workflow":
                     return await self._handle_start_workflow(arguments)
                 elif name == "stop_workflow":

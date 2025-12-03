@@ -224,6 +224,81 @@ class VisualAnalyzer:
         """Save screenshot to file"""
         return self.screen_capture.save_screenshot(image, path)
     
+    def select_region_interactive(
+        self,
+        screenshot_base64: Optional[str] = None,
+        image: Optional[np.ndarray] = None,
+        window_name: str = "Select Region - Click and drag, then press SPACE or ENTER"
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Interactively select a region from a screenshot
+        
+        ADR Note: Uses OpenCV's selectROI to display image and allow user to
+        drag a rectangle to select region. This is more user-friendly than
+        manually entering coordinates.
+        
+        Args:
+            screenshot_base64: Base64-encoded screenshot (alternative to image)
+            image: NumPy array image (alternative to screenshot_base64)
+            window_name: Name of the selection window
+        
+        Returns:
+            Dictionary with selected region coordinates, or None if cancelled
+        """
+        if not CV2_AVAILABLE:
+            logger.error("OpenCV not available, cannot show interactive selector")
+            return None
+        
+        import cv2
+        import base64
+        
+        # Get image from either source
+        if image is not None:
+            img = image.copy()
+        elif screenshot_base64:
+            try:
+                img_data = base64.b64decode(screenshot_base64)
+                nparr = np.frombuffer(img_data, np.uint8)
+                img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                if img is None:
+                    logger.error("Failed to decode screenshot")
+                    return None
+            except Exception as e:
+                logger.error(f"Failed to decode screenshot: {e}")
+                return None
+        else:
+            logger.error("No image or screenshot_base64 provided")
+            return None
+        
+        # Use OpenCV's selectROI for interactive selection
+        try:
+            # selectROI returns (x, y, width, height) or empty tuple if cancelled
+            roi = cv2.selectROI(window_name, img, showCrosshair=True, fromCenter=False)
+            
+            if roi == (0, 0, 0, 0):
+                # User pressed ESC or closed window
+                logger.info("Region selection cancelled")
+                return None
+            
+            x, y, width, height = roi
+            
+            # Destroy the window
+            cv2.destroyAllWindows()
+            
+            return {
+                "x": int(x),
+                "y": int(y),
+                "width": int(width),
+                "height": int(height),
+                "region_name": "interactive_selection",
+                "ready_for_monitoring": True
+            }
+        
+        except Exception as e:
+            logger.error(f"Error in interactive region selection: {e}")
+            cv2.destroyAllWindows()
+            return None
+    
     def get_status(self) -> Dict[str, Any]:
         """Get current analyzer status"""
         return {
