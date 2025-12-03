@@ -1,0 +1,27 @@
+{
+  // Terminal configuration for better prompt detection
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.profiles.windows": {
+    "PowerShell": {
+      "source": "PowerShell",
+      "args": ["-NoProfile"]
+    },
+    "Command Prompt": {
+      "path": "cmd.exe"
+    }
+  },
+  "terminal.integrated.automationProfile.windows": {
+    "path": "powershell.exe",
+    "args": ["-NoProfile"]
+  },
+  // Terminal behavior
+  "terminal.integrated.enablePersistentSessions": false,
+  "terminal.integrated.showExitAlert": false,
+  "terminal.integrated.scrollback": 1000,
+  // Auto-replies for common prompts (if needed)
+  "terminal.integrated.autoReplies": {
+    "PS.*>": "",
+    ".*\\$": ""
+  }
+}
+
